@@ -18,13 +18,10 @@ jobs:
         with:
           fetch-depth: 0
      
-      - name: 🛡️ Gitleaks (Secret Scanning)
-        uses: gitleaks/gitleaks-action@v2
-        with:
-          # This tells Gitleaks to scan the whole codebase, not just the last commit
-          args: detect --verbose
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: 🛡️ Gitleaks (Full Scan)
+        run: |
+          # We download the gitleaks tool and run it directly on the whole folder
+          docker run -v ${PWD}:/path zricethezav/gitleaks:latest detect --source="/path" --verbose --redact
         continue-on-error: true
 
       - name: Build Docker Image
