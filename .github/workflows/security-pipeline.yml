@@ -26,10 +26,12 @@ jobs:
       - name: 🛡️ Trivy (Dependency Scan)
         uses: aquasecurity/trivy-action@master
         with:
-          scan-type: 'fs' # Scan the filesystem
+          scan-type: 'fs'
+          scan-ref: '.' # Scan the whole directory
+          # We tell Trivy specifically to look for vulnerabilities in code and libraries
+          scanners: 'vuln,secret' 
           format: 'table'
-          exit-code: '0' # Don't stop the build yet, just show us the bugs
-          severity: 'CRITICAL,HIGH'
+          severity: 'CRITICAL,HIGH''
 
       - name: Build Docker Image
         run: |
