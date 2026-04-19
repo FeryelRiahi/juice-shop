@@ -23,18 +23,15 @@ jobs:
           # We download the gitleaks tool and run it directly on the whole folder
           docker run -v ${PWD}:/path zricethezav/gitleaks:latest detect --source="/path" --verbose --redact
         continue-on-error: true
-      - name: 🛡️ Trivy (Targeted File Scan)
+      - name: 📦 Generate Lockfile (Without full install)
         run: |
-          # 1. We scan the root package.json directly
-          echo "--- SCANNING ROOT BACKEND ---"
-          docker run --rm -v ${{ github.workspace }}:/path \
-            aquasec/trivy:latest config --severity HIGH,CRITICAL /path/package.json
+          # This creates the 'package-lock.json' without downloading 500MB of stuff
+          npm install --package-lock-only 
 
-          # 2. We scan the frontend package.json directly
-          echo "--- SCANNING FRONTEND ---"
-          docker run --rm -v ${{ github.workspace }}:/path \
-            aquasec/trivy:latest fs --scanners vuln --severity HIGH,CRITICAL /path/frontend/package.json
-        continue-on-error: true
+      - name: 🛡️ Trivy Scan (Now with Lockfile)
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/app \
+            aquasec/trivy:latest fs --scanners vuln /app
      
       - name: Build Docker Image
         run: |
