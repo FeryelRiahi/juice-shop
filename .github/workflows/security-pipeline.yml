@@ -23,20 +23,15 @@ jobs:
           # We download the gitleaks tool and run it directly on the whole folder
           docker run -v ${PWD}:/path zricethezav/gitleaks:latest detect --source="/path" --verbose --redact
         continue-on-error: true
-      - name: 🛡️ Trivy (The "Show Me The Files" Scan)
+      - name: 🛡️ Trivy (The "Force Scan" Attempt)
         run: |
-          # 1. We run the container and ask it to list what it sees in /path
-          echo "--- INTERNAL DOCKER CHECK ---"
-          docker run --rm -v ${{ github.workspace }}:/path alpine ls -R /path
-          
-          echo "--- STARTING ACTUAL SCAN ---"
-          # 2. If the files show up above, this scan WILL work
           docker run --rm -v ${{ github.workspace }}:/path \
             aquasec/trivy:latest fs \
             --scanners vuln \
             --severity CRITICAL,HIGH \
+            --skip-dirs "frontend/node_modules" \
+            --debug \
             /path
-        continue-on-error: true
      
       - name: Build Docker Image
         run: |
