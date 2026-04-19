@@ -23,18 +23,14 @@ jobs:
           # We download the gitleaks tool and run it directly on the whole folder
           docker run -v ${PWD}:/path zricethezav/gitleaks:latest detect --source="/path" --verbose --redact
         continue-on-error: true
-      - name: 📦 Generate Lockfile (Safe Mode)
+      
+      - name: 🐳 Build Docker Image
         run: |
-          # --package-lock-only: Don't download the heavy node_modules
-          # --ignore-scripts: Don't run the broken 'postinstall' build
-          # --legacy-peer-deps: Avoid "Peer Dependency" conflicts with old libraries
-          npm install --package-lock-only --ignore-scripts --legacy-peer-deps
+          # We build it locally and tag it 'juice-shop:latest'
+          docker build -t juice-shop:latest .
 
-      - name: 🛡️ Trivy Scan (The Final Victory)
+      - name: 🛡️ Trivy Image Scan
         run: |
-          docker run --rm -v ${{ github.workspace }}:/app \
-            aquasec/trivy:latest fs --scanners vuln --severity HIGH,CRITICAL /app
-      - name: Build Docker Image
-        run: |
-          docker build -t juice-shop .
-          echo "✅ Docker build successful!"
+          # Now we scan the 'cake' we just baked
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:latest image --severity HIGH,CRITICAL juice-shop:latest
