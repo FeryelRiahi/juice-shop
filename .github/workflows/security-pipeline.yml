@@ -23,16 +23,20 @@ jobs:
           # We download the gitleaks tool and run it directly on the whole folder
           docker run -v ${PWD}:/path zricethezav/gitleaks:latest detect --source="/path" --verbose --redact
         continue-on-error: true
-      - name: 🛡️ Trivy (Deep Dependency Scan)
+      - name: 📂 List files for debugging
+        run: |
+          echo "Checking current directory:"
+          ls -R
+
+      - name: 🛡️ Trivy (Final Boss Mode)
         uses: aquasecurity/trivy-action@master
         with:
-          scan-type: 'repo'
+          scan-type: 'fs'
           scan-ref: '.'
+          # We are going to be extremely specific now
+          file-patterns: 'npm:package.json'
           format: 'table'
-          # This forces it to look for vulnerabilities specifically
-          scanners: 'vuln' 
           severity: 'CRITICAL,HIGH'
-
       - name: Build Docker Image
         run: |
           docker build -t juice-shop .
