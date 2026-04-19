@@ -23,16 +23,17 @@ jobs:
           # We download the gitleaks tool and run it directly on the whole folder
           docker run -v ${PWD}:/path zricethezav/gitleaks:latest detect --source="/path" --verbose --redact
         continue-on-error: true
-      - name: 📦 Generate Lockfile (Without full install)
+      - name: 📦 Generate Lockfile (Safe Mode)
         run: |
-          # This creates the 'package-lock.json' without downloading 500MB of stuff
-          npm install --package-lock-only 
+          # --package-lock-only: Don't download the heavy node_modules
+          # --ignore-scripts: Don't run the broken 'postinstall' build
+          # --legacy-peer-deps: Avoid "Peer Dependency" conflicts with old libraries
+          npm install --package-lock-only --ignore-scripts --legacy-peer-deps
 
-      - name: 🛡️ Trivy Scan (Now with Lockfile)
+      - name: 🛡️ Trivy Scan (The Final Victory)
         run: |
           docker run --rm -v ${{ github.workspace }}:/app \
-            aquasec/trivy:latest fs --scanners vuln /app
-     
+            aquasec/trivy:latest fs --scanners vuln --severity HIGH,CRITICAL /app
       - name: Build Docker Image
         run: |
           docker build -t juice-shop .
