@@ -23,6 +23,18 @@ jobs:
           # We download the gitleaks tool and run it directly on the whole folder
           docker run -v ${PWD}:/path zricethezav/gitleaks:latest detect --source="/path" --verbose --redact
         continue-on-error: true
+      - name: 🛡️ SonarQube Analysis
+        env:
+          # This tells GitHub: "Go to my vault and get the value named SONAR_TOKEN"
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/usr/src \
+            sonarsource/sonar-scanner-cli \
+            -Dsonar.projectKey=YOUR_PROJECT_KEY_HERE \
+            -Dsonar.organization=YOUR_ORG_KEY_HERE \
+            -Dsonar.host.url=https://sonarcloud.io \
+            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
       
       - name: 🐳 Build Docker Image
         run: |
