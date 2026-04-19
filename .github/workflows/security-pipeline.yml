@@ -23,14 +23,10 @@ jobs:
           # We download the gitleaks tool and run it directly on the whole folder
           docker run -v ${PWD}:/path zricethezav/gitleaks:latest detect --source="/path" --verbose --redact
         continue-on-error: true
-      - name: 🛡️ Trivy (Manual Scan - No Permissions Error)
+      - name: 🛡️ Trivy (Docker Scan)
         run: |
-          # 1. Download the tool into the current folder
-          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b . v0.48.3
-          
-          # 2. Run it directly from the current folder (./trivy)
-          # We'll use 'vuln' to find the "Tainted Ingredients"
-          ./trivy fs --scanners vuln --severity CRITICAL,HIGH .
+          # We run Trivy inside its own container to avoid permission issues
+          docker run -v ${{ github.workspace }}:/root/.cache/ -v ${PWD}:/path aquasec/trivy:latest fs --scanners vuln --severity CRITICAL,HIGH /path
         continue-on-error: true
      
       - name: Build Docker Image
