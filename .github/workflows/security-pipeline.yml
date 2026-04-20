@@ -4,28 +4,26 @@ on:
   push:
     branches: [ "master" ]
   workflow_dispatch:
-  
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  build-and-scan:
+  # JOB 1: Scanning the Source Code (SAST & Secrets)
+  static-security:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-     
+
       - name: 🛡️ Gitleaks (Full Scan)
         run: |
-          # We download the gitleaks tool and run it directly on the whole folder
-          docker run -v ${PWD}:/path zricethezav/gitleaks:latest detect --source="/path" --verbose --redact
-        continue-on-error: true
+          docker run -v ${PWD}:/path zricethezav/gitleaks:latest detect --source="/path" --verbose --redact --exit-code 1
+
       - name: 🛡️ SonarQube Analysis
         env:
-          # This tells GitHub: "Go to my vault and get the value named SONAR_TOKEN"
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           docker run --rm \
@@ -34,15 +32,52 @@ jobs:
             -Dsonar.projectKey=FeryelRiahi_juice-shop \
             -Dsonar.organization=feryelriahi \
             -Dsonar.host.url=https://sonarcloud.io \
-            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
-      
-      - name: 🐳 Build Docker Image
-        run: |
-          # We build it locally and tag it 'juice-shop:latest'
-          docker build -t juice-shop:latest .
+            -Dsonar.login=${{ secrets.SONAR_TOKEN }} \
+            -Dsonar.qualitygate.wait=true
+
+  # JOB 2: Scanning the Infrastructure (SCA)
+  container-security:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐳 Build Staging Image
+        run: docker build -t juice-shop:staging .
 
       - name: 🛡️ Trivy Image Scan
         run: |
-          # Now we scan the 'cake' we just baked
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-            aquasec/trivy:latest image --severity HIGH,CRITICAL juice-shop:latest
+            aquasec/trivy:latest image \
+            --severity HIGH,CRITICAL \
+            --exit-code 1 \
+            --ignore-unfixed \
+            juice-shop:staging
+
+  # JOB 3: Scanning the Running App (DAST)
+  dynamic-security:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🚀 Run Juice Shop
+        run: |
+          docker build -t juice-shop:dast .
+          docker run -d -p 3000:3000 --name juice-shop-test juice-shop:dast
+          sleep 20 
+
+      - name: 🕸️ ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.12.0
+        with:
+          target: 'http://localhost:3000'
+          fail_action: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  # FINAL GATE: This job only runs if everything else passes
+  promotion:
+    needs: [static-security, container-security, dynamic-security]
+    runs-on: ubuntu-latest
+    steps:
+      - name: ✅ Final Approval
+        run: echo "All security gates passed. Image is cleared for Production."
