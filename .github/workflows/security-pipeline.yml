@@ -93,22 +93,8 @@ jobs:
         with:
           target: 'http://localhost:3000'
           token: ${{ secrets.GITHUB_TOKEN }}
-          # This forces ZAP to generate the report
-          sarif_export: true 
-
-      - name: 📁 Verify and Move SARIF
-        if: always()
-        run: |
-          # Look for the file in the workspace and move it to the root if found
-          find . -name "results.sarif" -exec cp {} ./results.sarif \;
-          ls -l ./results.sarif || echo "SARIF file not found anywhere!"
-
-      - name: 📤 Upload ZAP to Security Tab
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
-        with:
-          sarif_file: 'results.sarif'
-          category: zap-dast
+         
+     
   # 5. THE GATE
   promotion:
     needs: [gitleaks-scan, sonarqube-scan, container-security, dynamic-security]
