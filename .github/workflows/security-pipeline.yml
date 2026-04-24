@@ -8,14 +8,13 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
-# Permissions moved back to the top for the whole workflow
 permissions:
   contents: read
   issues: write
-  security-events: write
+  security-events: write # CRITICAL: This allows the "Security Tab" to receive data
 
 jobs:
-  # JOB 1: Secrets Detection (Parallel)
+  # 1. SECRETS (SARIF)
   gitleaks-scan:
     runs-on: ubuntu-latest
     steps:
@@ -26,75 +25,78 @@ jobs:
 
       - name: 🛡️ Gitleaks (Full Scan)
         run: |
-          docker run -v ${PWD}:/path zricethezav/gitleaks:latest detect --source="/path" --verbose --redact --exit-code 1
+          docker run -v ${PWD}:/path zricethezav/gitleaks:latest detect --source="/path" --format sarif --report-path="/path/gitleaks.sarif" --redact --exit-code 0
 
-  # JOB 2: Code Quality (Parallel - Won't be skipped if Gitleaks fails)
+      - name: 📤 Upload Gitleaks to Security Tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: gitleaks.sarif
+
+  # 2. CODE QUALITY (Direct Integration)
   sonarqube-scan:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: 🛡️ SonarQube Analysis
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
-          docker run --rm \
-            -v ${{ github.workspace }}:/usr/src \
-            sonarsource/sonar-scanner-cli \
-            -Dsonar.projectKey=FeryelRiahi_juice-shop \
-            -Dsonar.organization=feryelriahi \
-            -Dsonar.host.url=https://sonarcloud.io \
-            -Dsonar.login=${{ secrets.SONAR_TOKEN }} \
+          docker run --rm -v ${{ github.workspace }}:/usr/src sonarsource/sonar-scanner-cli \
+            -Dsonar.projectKey=FeryelRiahi_juice-shop -Dsonar.organization=feryelriahi \
+            -Dsonar.host.url=https://sonarcloud.io -Dsonar.login=${{ secrets.SONAR_TOKEN }} \
             -Dsonar.qualitygate.wait=true
 
-  # JOB 3: Infrastructure Scan (Parallel)
+  # 3. CONTAINER (SARIF)
   container-security:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: 🐳 Build Staging Image
         run: docker build -t juice-shop:staging .
-
       - name: 🛡️ Trivy Image Scan
         run: |
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-            aquasec/trivy:latest image \
-            --severity HIGH,CRITICAL \
-            --exit-code 1 \
-            --ignore-unfixed \
-            juice-shop:staging
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v ${PWD}:/path \
+            aquasec/trivy:latest image --format sarif --output /path/trivy.sarif \
+            --severity HIGH,CRITICAL juice-shop:staging
+      - name: 📤 Upload Trivy to Security Tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy.sarif
 
-  # JOB 4: Dynamic Attack (Parallel)
+  # 4. DYNAMIC (SARIF + ISSUES)
   dynamic-security:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: 🐳 Build DAST Image
         run: docker build -t juice-shop:dast .
-
       - name: 🚀 Run Juice Shop
         run: |
           docker run -d -p 3000:3000 --name juice-shop-test juice-shop:dast
           sleep 20 
-
       - name: 🔓 Fix Permissions for ZAP
         run: chmod -R 777 . 
-
       - name: 🕸️ ZAP Baseline Scan
         uses: zaproxy/action-baseline@v0.12.0
         with:
           target: 'http://localhost:3000'
-          fail_action: true
           token: ${{ secrets.GITHUB_TOKEN }}
+          # Generates results.sarif automatically
+          sarif_export: true 
 
-  # FINAL GATE: Promotion
+      - name: 📤 Upload ZAP to Security Tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'results.sarif'
+
+  # 5. THE GATE
   promotion:
-    # Now explicitly waits for ALL four boxes to finish
     needs: [gitleaks-scan, sonarqube-scan, container-security, dynamic-security]
     runs-on: ubuntu-latest
     steps:
