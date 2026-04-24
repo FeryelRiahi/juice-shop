@@ -59,6 +59,9 @@ jobs:
 # JOB 3: Scanning the Running App (DAST)
   dynamic-security:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
