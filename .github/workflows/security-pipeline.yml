@@ -7,13 +7,16 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  permissions:
+
+# Permissions moved back to the top for the whole workflow
+permissions:
   contents: read
   issues: write
+  security-events: write
 
 jobs:
-  # JOB 1: Scanning the Source Code (SAST & Secrets)
-  static-security:
+  # JOB 1: Secrets Detection (Parallel)
+  gitleaks-scan:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -24,6 +27,13 @@ jobs:
       - name: 🛡️ Gitleaks (Full Scan)
         run: |
           docker run -v ${PWD}:/path zricethezav/gitleaks:latest detect --source="/path" --verbose --redact --exit-code 1
+
+  # JOB 2: Code Quality (Parallel - Won't be skipped if Gitleaks fails)
+  sonarqube-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: 🛡️ SonarQube Analysis
         env:
@@ -38,7 +48,7 @@ jobs:
             -Dsonar.login=${{ secrets.SONAR_TOKEN }} \
             -Dsonar.qualitygate.wait=true
 
-  # JOB 2: Scanning the Infrastructure (SCA)
+  # JOB 3: Infrastructure Scan (Parallel)
   container-security:
     runs-on: ubuntu-latest
     steps:
@@ -56,12 +66,10 @@ jobs:
             --exit-code 1 \
             --ignore-unfixed \
             juice-shop:staging
-# JOB 3: Scanning the Running App (DAST)
+
+  # JOB 4: Dynamic Attack (Parallel)
   dynamic-security:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      issues: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -72,11 +80,9 @@ jobs:
       - name: 🚀 Run Juice Shop
         run: |
           docker run -d -p 3000:3000 --name juice-shop-test juice-shop:dast
-          # Wait for the app to wake up
           sleep 20 
 
       - name: 🔓 Fix Permissions for ZAP
-        # This is the magic line that prevents the Permission Error (Errno 13)
         run: chmod -R 777 . 
 
       - name: 🕸️ ZAP Baseline Scan
@@ -86,9 +92,10 @@ jobs:
           fail_action: true
           token: ${{ secrets.GITHUB_TOKEN }}
 
-  # FINAL GATE: This job only runs if everything else passes
+  # FINAL GATE: Promotion
   promotion:
-    needs: [static-security, container-security, dynamic-security]
+    # Now explicitly waits for ALL four boxes to finish
+    needs: [gitleaks-scan, sonarqube-scan, container-security, dynamic-security]
     runs-on: ubuntu-latest
     steps:
       - name: ✅ Final Approval
