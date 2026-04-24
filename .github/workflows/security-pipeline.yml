@@ -53,19 +53,25 @@ jobs:
             --exit-code 1 \
             --ignore-unfixed \
             juice-shop:staging
-
-  # JOB 3: Scanning the Running App (DAST)
+# JOB 3: Scanning the Running App (DAST)
   dynamic-security:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: 🐳 Build DAST Image
+        run: docker build -t juice-shop:dast .
+
       - name: 🚀 Run Juice Shop
         run: |
-          docker build -t juice-shop:dast .
           docker run -d -p 3000:3000 --name juice-shop-test juice-shop:dast
+          # Wait for the app to wake up
           sleep 20 
+
+      - name: 🔓 Fix Permissions for ZAP
+        # This is the magic line that prevents the Permission Error (Errno 13)
+        run: chmod -R 777 . 
 
       - name: 🕸️ ZAP Baseline Scan
         uses: zaproxy/action-baseline@v0.12.0
