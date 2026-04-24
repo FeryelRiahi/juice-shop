@@ -25,13 +25,19 @@ jobs:
 
       - name: 🛡️ Gitleaks (Full Scan)
         run: |
-          docker run -v ${PWD}:/path zricethezav/gitleaks:latest detect --source="/path" --format sarif --report-path="/path/gitleaks.sarif" --redact --exit-code 0
+          docker run -v ${{ github.workspace }}:/path zricethezav/gitleaks:latest detect \
+            --source="/path" \
+            --report-format sarif \
+            --report-path="/path/gitleaks.sarif" \
+            --redact \
+            --exit-code 0
 
       - name: 📤 Upload Gitleaks to Security Tab
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: gitleaks.sarif
+          category: gitleaks-secrets
 
   # 2. CODE QUALITY (Direct Integration)
   sonarqube-scan:
@@ -66,6 +72,7 @@ jobs:
         if: always()
         with:
           sarif_file: trivy.sarif
+          category: trivy-container-scan
 
   # 4. DYNAMIC (SARIF + ISSUES)
   dynamic-security:
@@ -86,14 +93,15 @@ jobs:
         with:
           target: 'http://localhost:3000'
           token: ${{ secrets.GITHUB_TOKEN }}
-          # Generates results.sarif automatically
           sarif_export: true 
 
       - name: 📤 Upload ZAP to Security Tab
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
+          # The ZAP action hardcodes this filename to 'results.sarif'
           sarif_file: 'results.sarif'
+          category: zap-dast
 
   # 5. THE GATE
   promotion:
